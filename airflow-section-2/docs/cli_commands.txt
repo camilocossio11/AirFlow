@@ -1,5 +1,6 @@
 ﻿CLI Commands
 
+##################################### MANUALLY ######################################
 
 Installing Airflow
 docker run -it --rm -p 8080:8080 python:3.8-slim /bin/bash
@@ -63,18 +64,23 @@ airflow db init
 airflow scheduler &
 * Start Airflow’s scheduler in background
 
+airflow users create -h
+* Show how to create an user
+
+airflow users create -u admin -f admin -l admin -r Admin -e admin@airflow.com -p admin
+* Create an admin user
 
 airflow webserver &
 * Start Airflow’s webserver in background
 
+############################## USING DOCKERFILE IN THIS FOLDER ###################################
 
 docker build -t airflow-basic .
 * Build a docker image from the Dockerfile in the current directory (airflow-materials/airflow-basic)  and name it airflow-basic
 
 docker run --rm -d -p 8080:8080 airflow-basic
 
-Quick Tour of Airflow CLI
-
+############################## Quick Tour of Airflow CLI ##############################
 
 docker ps
 * Show running docker containers
