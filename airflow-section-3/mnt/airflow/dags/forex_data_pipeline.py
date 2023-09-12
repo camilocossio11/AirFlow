@@ -5,8 +5,6 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.providers.apache.hive.operators.hive import HiveOperator
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
-from airflow.operators.email import EmailOperator
-from airflow.providers.slack.operators.slack_webhook import SlackWebhookOperator
 
 from datetime import datetime, timedelta
 import csv
@@ -41,37 +39,34 @@ def download_rates():
                 json.dump(outdata, outfile)
                 outfile.write('\n')
 
-def _get_message() -> str:
-    return "Hi from forex_data_pipeline"
-
 with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1), 
     schedule_interval="@daily", default_args=default_args, catchup=False) as dag:
 
     is_forex_rates_available = HttpSensor(
-        task_id="is_forex_rates_available",
-        http_conn_id="forex_api",
-        endpoint="marclamberti/f45f872dea4dfd3eaa015a4a1af4b39b",
-        response_check=lambda response: "rates" in response.text,
-        poke_interval=5,
-        timeout=20
+        task_id = "is_forex_rates_available",
+        http_conn_id = "forex_api",
+        endpoint = "marclamberti/f45f872dea4dfd3eaa015a4a1af4b39b", # What we can find after the first "/"" in the URL
+        response_check = lambda response: "rates" in response.text, # Key word to ensure succeed
+        poke_interval = 5, #Interval to verify if info is available or not
+        timeout = 20 # If sensor takes more than 20 seconds, it fails
     )
 
     is_forex_currencies_file_available = FileSensor(
-        task_id="is_forex_currencies_file_available",
-        fs_conn_id="forex_path",
-        filepath="forex_currencies.csv",
-        poke_interval=5,
-        timeout=20
+        task_id = "is_forex_currencies_file_available",
+        fs_conn_id = "forex_path",
+        filepath = "forex_currencies.csv",
+        poke_interval = 5,
+        timeout = 20
     )
 
-    downloading_rates = PythonOperator(
-        task_id="downloading_rates",
-        python_callable=download_rates
+    run_python_function = PythonOperator(
+        task_id = "run_python_function",
+        python_callable = download_rates
     )
 
     saving_rates = BashOperator(
-        task_id="saving_rates",
-        bash_command="""
+        task_id = "saving_rates",
+        bash_command = """
             hdfs dfs -mkdir -p /forex && \
             hdfs dfs -put -f $AIRFLOW_HOME/dags/files/forex_rates.json /forex
         """
@@ -98,26 +93,11 @@ with DAG("forex_data_pipeline", start_date=datetime(2021, 1 ,1),
     )
 
     forex_processing = SparkSubmitOperator(
-        task_id="forex_processing",
-        application="/opt/airflow/dags/scripts/forex_processing.py",
-        conn_id="spark_conn",
-        verbose=False
+        task_id = "forex_processing",
+        application = "/opt/airflow/dags/scripts/forex_processing.py",
+        conn_id = "spark_conn",
+        verbose = False
     )
 
-    send_email_notification = EmailOperator(
-        task_id="send_email_notification",
-        to="airflow_course@yopmail.com",
-        subject="forex_data_pipeline",
-        html_content="<h3>forex_data_pipeline</h3>"
-    )
-
-    send_slack_notification = SlackWebhookOperator(
-        task_id="send_slack_notification",
-        http_conn_id="slack_conn",
-        message=_get_message(),
-        channel="#monitoring"
-    )
-    
-    is_forex_rates_available >> is_forex_currencies_file_available >> downloading_rates >> saving_rates 
-    saving_rates >> creating_forex_rates_table >> forex_processing
-    forex_processing >> send_email_notification >> send_slack_notification 
+    is_forex_rates_available >> is_forex_currencies_file_available >> run_python_function\
+    >> saving_rates >> creating_forex_rates_table >> forex_processing
